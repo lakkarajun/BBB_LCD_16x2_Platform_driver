@@ -1,0 +1,42 @@
+* Load the am335x-boneblack.dtb file on Beaglebone Black:
+
+* LCD 16x2 device tree entry details with LCD Platform driver:
+* ------------------------------------------------------------
+[root@BBB: drivers]# ls /sys/devices/platform/lcd16x2/
+driver_override                    supplier:platform:44e10800.pinmux
+modalias                           supplier:platform:481ac000.gpio
+of_node                            uevent
+power                              waiting_for_supplier
+subsystem
+[root@BBB: lcd16x2]# cat modalias 
+of:Nlcd16x2T(null)Corg,lcd16x2
+[root@BBB: lcd16x2]# cd of_node
+[root@BBB: lcd16x2]# 
+[root@BBB: of_node]# ls
+compatible     d5-gpios       d7-gpios       name           pinctrl-names  rw-gpios
+d4-gpios       d6-gpios       en-gpios       pinctrl-0      rs-gpios       status
+
+* LCD driver module: 
+* ------------------
+[root@BBB: drivers]# ls
+lcd_platform_driver.ko
+am335x-boneblack.dtb
+[root@BBB: drivers]# insmod lcd_platform_driver.ko
+[root@BBB: drivers]# dmesg
+[ 5894.848746] lcd_sysfs_init: lcd module load success
+[root@BBB: drivers]# lsmod | grep lcd
+lcd_platform_driver    12288  0
+[root@BBB: drivers]# modinfo lcd_platform_driver.ko 
+filename:       /root/drivers/lcd_platform_driver.ko
+description:    A LCD gpio sysfs driver
+author:         Raju Lakkaraju
+license:        GPL
+depends:        
+name:           lcd_platform_driver
+vermagic:       6.15.5 SMP preempt mod_unload modversions ARMv7 p2v8 
+[root@BBB: drivers]# rmmod lcd_platform_driver
+[root@BBB: drivers]# dmesg
+[ 5894.848746] lcd_sysfs_init: lcd module load success
+[ 6016.611874] lcd_sysfs_exit: lcd module exit success
+
+

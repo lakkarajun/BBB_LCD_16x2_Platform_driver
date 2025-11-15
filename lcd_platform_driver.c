@@ -32,14 +32,14 @@ struct platform_driver lcdsysfs_platform_driver = {
 
 static  int __init lcd_sysfs_init(void)
 {
-	pr_info("%s: lcd module load success\n", __func__);
+	pr_info("lcd module load success\n");
 	return 0;
 }
 
 static void __exit lcd_sysfs_exit(void)
 {
 
-	pr_info("%s: lcd module exit success\n", __func__);
+	pr_info("lcd module exit success\n");
 }
 
 module_init(lcd_sysfs_init);
