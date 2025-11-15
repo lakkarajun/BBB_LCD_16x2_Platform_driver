@@ -1,0 +1,51 @@
+#include "lcd_platform_driver.h"
+
+static void lcd_sysfs_remove(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+
+	dev_info(dev, "lcd remove success\n");
+}
+
+
+static int lcd_sysfs_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+
+	dev_info(dev, "lcd probe success\n");
+	return 0;
+}
+
+struct of_device_id lcd_device_match[] = {
+	{.compatible = "org,lcd16x2"},
+	{ }
+};
+
+struct platform_driver lcdsysfs_platform_driver = {
+	.probe = lcd_sysfs_probe,
+	.remove = lcd_sysfs_remove,
+	.driver = {
+		.name = "bone-lcd-sysfs",
+		.of_match_table = of_match_ptr(lcd_device_match)
+	}
+};
+
+static  int __init lcd_sysfs_init(void)
+{
+	pr_info("%s: lcd module load success\n", __func__);
+	return 0;
+}
+
+static void __exit lcd_sysfs_exit(void)
+{
+
+	pr_info("%s: lcd module exit success\n", __func__);
+}
+
+module_init(lcd_sysfs_init);
+module_exit(lcd_sysfs_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Raju Lakkaraju");
+MODULE_DESCRIPTION("A LCD gpio sysfs driver");
+
