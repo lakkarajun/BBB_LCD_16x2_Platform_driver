@@ -58,3 +58,29 @@ vermagic:       6.15.5 SMP preempt mod_unload modversions ARMv7 p2v8
 [root@BBB: drivers]# cd /sys/class/bone_lcd/
 [root@BBB: bone_lcd]# ls
 
+* Class Attributes (lcdcmd, lcdtext, lcdscroll and lcdxy) test:
+* -------------------------------------------------------------
+Note: lcdcmd, lcdtext and lcdscroll are "Write-Only" attributes
+      lcdxy - Read and Write attribute
+[root@BBB: drivers]# insmod lcd_platform_driver.ko
+[  178.110069] bone-lcd-sysfs lcd16x2: lcd probe success
+[  178.120527] lcd_sysfs_init: lcd module load success
+[root@BBB: LCD16x2]# lsmod | grep lcd
+lcd_platform_driver    12288  0
+[root@BBB: LCD16x2]# dmesg
+[ 4425.061305] bone-lcd-sysfs lcd16x2: lcd probe success
+[ 4425.070589] lcd_sysfs_init: lcd module load success
+[root@BBB: LCD16x2]# pwd
+/sys/class/bone_lcd/LCD16x2
+[root@BBB: LCD16x2]# ls
+lcdcmd     lcdscroll  lcdtext    lcdxy      power      subsystem  uevent
+[root@BBB: LCD16x2]# cat lcdxy
+[root@BBB: LCD16x2]# echo 0x1 > lcdcmd
+[root@BBB: drivers]# dmesg
+[ 7632.430183] bone_lcd LCD16x2: lcdxy_show:
+[ 7648.012395] bone_lcd LCD16x2: lcdcmd_store: count:4
+[root@BBB: LCD16x2]# echo "Hello" > lcdtext
+[ 7693.344504] bone_lcd LCD16x2: lcdtext_store: count:6
+[root@BBB: LCD16x2]# cat lcdtext
+cat: can't open 'lcdtext': Permission denied
+

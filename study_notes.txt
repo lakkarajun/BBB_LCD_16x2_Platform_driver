@@ -1,0 +1,146 @@
+Q1: In lcd_exit( ) function, is class_destroy call first or platform_driver_unregister( )?
+Ans: You must call platform_driver_unregister() first, and class_destroy() second.
+i.e.
+static void __exit lcd_exit(void)
+{
+    platform_driver_unregister(&lcd_driver);  // 1. unregister driver
+    class_destroy(lcd_class);                 // 2. destroy class
+}
+
+Why this order?
+1. platform_driver_unregister() must run first
+  When you unregister the platform driver:
+  - The kernel calls your driver's remove() callback
+  - Your remove() function will normally call device_destroy() / device_unregister()
+  Those devices belong to the class
+So the class must still exist while devices are being removed.
+
+Wrong order?
+Then:
+class_destroy() removes /sys/class/bone_lcd/
+After this, driver unregistration triggers your .remove()
+.remove() will try:
+  device_unregister(dev);
+But the class no longer exists → kernel warnings, crashes, or sysfs corruption
+Wrong order causes:
+-------------------
+sysfs: cannot find kobject...
+WARNING: memory leak in kobject
+Device nodes not cleaned up
+Kernel oops if device_destroy() references a destroyed class
+#########################################################################################
+Q2: After allocate driver data structure memory, do i need to call platform_set_drvdata() ?
+
+Ans: Yes — you should call platform_set_drvdata() after allocating your driver private data structure.
+Why you should call platform_set_drvdata()?
+- you now have a per-device driver private data struct.
+- This structure needs to be retrievable later from:
+  * remove()
+  * sysfs attribute callbacks (show() / store())
+  * interrupt handlers
+  * workqueues
+  * any helper function that gets only struct device *dev
+Linux provides a built-in storage pointer inside struct device for exactly this purpose.
+* you can retrieve it: struct driver_private_data *drv_data = dev_get_drvdata(dev);
+* inside remove(): struct driver_private_data *drv_data = platform_get_drvdata(pdev);
+#########################################################################################
+Q3. After adding the LCD class attributes, the build was successful. Able to load LCD 
+module and class attributes appear in "bone_lcd" class. Able to read "RW" attribute by
+using the cat command. But when writing the value to the "WO" command, the attribute store
+function is called repeatedly. why?
+
+Ans: In sysfs, if the returned value is not equal to the input buffer length, the kernel
+ retries the write—leading to the store handler being called again and again.
+Root Cause:
+-----------
+store() return value mismatch:
+Your store() must return count (number of bytes written).
+If you return 0, -EINVAL, -EIO, or anything other than count, sysfs will call store() again.
+Second common cause:
+--------------------
+attribute defined as RW instead of WO:
+If you used: DEVICE_ATTR(wo, 0666, wo_show, wo_store); or
+DEVICE_ATTR_RW(wo);
+But your wo_show() returns garbage or errors, the kernel may try to "fix" it by retrying write.For a write-only attribute, you should use: DEVICE_ATTR_WO(wo);
+or manually: static DEVICE_ATTR(wo, 0220, NULL, wo_store);
+Permissions must be:
+0220 → write-only
+No .show() function
+Third cause:
+------------
+cat/echo behavior:
+Remember:
+echo 1 > /sys/class/bone_lcd/lcd0/wo
+shell writes '1\n' (two bytes!)
+Your store() receives buffer "1\n", count = 2
+You must return 2, not 1.
+Otherwise sysfs retries.
+#########################################################################################
+Q4: In platform device driver development, I have device private data structure and driver
+private data structure. If i want to track general device structure 
+(i.e "struct device *dev"), where to define?
+
+Ans: You should store struct device *dev inside the driver private data structure
+(the structure you manage inside .probe() and attach with dev_set_drvdata()).
+Why?
+"struct device *dev" belongs to the device core — not to the device tree data or
+your custom platform_data.
+Your platform driver is responsible for handling the Linux device model,
+so the driver’s private data is the proper place to keep a pointer to dev.
+
+Platform data (your device private data) should only contain the hardware-specific
+static configuration (like GPIO numbers, register offsets, device capabilities),
+and not runtime kernel objects like struct device.
+How to access later in any function:
+-  struct driver_private_data *drv_data = dev_get_drvdata(dev);
+Where NOT to store struct device *dev
+-------------------------------------
+- Avoid storing in:
+  * Device private data struct - DT or board info must stay pure and reusable 
+    — no kernel objects
+  * Global variables - Prevents multiple devices / multi-instance support
+  * Platform device struct modifications - Not recommended; platform device is owned
+    by core layer
+
+#########################################################################################
+Q5: What are the argument pass to device_create_with_groups( ) function?
+
+Ans: 
+Here is the function signature:
+struct device *device_create_with_groups(struct class *cls,
+                                         struct device *parent,
+                                         dev_t devt,
+                                         void *drvdata,
+                                         const struct attribute_group **groups,
+                                         const char *fmt, ...);
+1. cls: Your class object (created using class_create()), pass as first parameter.
+2. parent: Usually NULL unless your device has a parent.
+   For platform drivers, you normally pass: parent = NULL;
+   (Unless you want the created device to appear under another device.)
+3. devt: Device number—not needed unless you expose a character device.
+   If you do not use a char device, set: devt = 0;
+   If you do use a char device, pass your allocated dev_t: devt = MKDEV(major, minor);
+4. drvdata: Pointer to your driver private data, stored in the struct device so you can
+   retrieve it later via dev_get_drvdata().
+5. groups: Array of pointers to struct attribute_group.
+   Important: Must be a NULL-terminated list.
+6. fmt / ...: The format string for the device name (same as device_create()):
+   "fmt" = "lcd%d", id
+   This will create: /sys/class/bone_lcd/lcd0
+#########################################################################################
+Q6: where to call "class_create()"? I mean call in init() or probe() function?
+
+Ans: Call class_create() in your module’s init function — NOT inside the probe().
+     This is the correct and recommended pattern.
+Why class_create() must be called in module_init():
+---------------------------------------------------
+A class represents a global sysfs class (like i2c, spi, tty, block, your "bone_lcd", etc.).
+It is not device-specific and not tied to a particular platform device instance.
+Therefore:
+ - A class should be created once when the module loads.
+ - The class should work for all future devices that your driver supports.
+ - The class must be destroyed when the module unloads.
+So, it cannot live inside .probe(), because .probe() may run multiple times—one per device
+instance.
+
+#########################################################################################
