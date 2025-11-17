@@ -40,3 +40,21 @@ vermagic:       6.15.5 SMP preempt mod_unload modversions ARMv7 p2v8
 [ 6016.611874] lcd_sysfs_exit: lcd module exit success
 
 
+* Class entry "bone_lcd" add:
+* --------------------------
+[root@BBB: drivers]# insmod lcd_platform_driver.ko
+[   62.703065] lcd_platform_driver: loading out-of-tree module taints kernel.
+[   62.714868] bone-lcd-sysfs lcd16x2: lcd probe success
+[   62.726682] lcd_sysfs_init: lcd module load success
+[root@BBB: drivers]# dmesg
+[   62.703065] lcd_platform_driver: loading out-of-tree module taints kernel.
+[   62.714868] bone-lcd-sysfs lcd16x2: lcd probe success
+[   62.726682] lcd_sysfs_init: lcd module load success
+[root@BBB: drivers]# rmmod lcd_platform_driver
+[   92.928803] bone-lcd-sysfs lcd16x2: lcd remove success
+[   92.934981] lcd_sysfs_exit: lcd module exit success
+[root@BBB: mylcd]# pwd
+/sys/class/bone_lcd
+[root@BBB: drivers]# cd /sys/class/bone_lcd/
+[root@BBB: bone_lcd]# ls
+

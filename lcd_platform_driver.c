@@ -1,5 +1,12 @@
 #include "lcd_platform_driver.h"
 
+/* LCD Driver private data structure */
+struct lcd_drv_private_data {
+	struct class *class_lcd;
+};
+
+struct lcd_drv_private_data lcd_drv_data;
+
 static void lcd_sysfs_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -32,12 +39,22 @@ struct platform_driver lcdsysfs_platform_driver = {
 
 static  int __init lcd_sysfs_init(void)
 {
+	lcd_drv_data.class_lcd = class_create("bone_lcd");
+	if (IS_ERR(lcd_drv_data.class_lcd)) {
+		pr_err("Error in creating class\n");
+		return PTR_ERR(lcd_drv_data.class_lcd);
+	}
+
+	platform_driver_register(&lcdsysfs_platform_driver);
+
 	pr_info("lcd module load success\n");
 	return 0;
 }
 
 static void __exit lcd_sysfs_exit(void)
 {
+	platform_driver_unregister(&lcdsysfs_platform_driver);
+	class_destroy(lcd_drv_data.class_lcd);
 
 	pr_info("lcd module exit success\n");
 }
