@@ -1,45 +1,105 @@
 #include "lcd_platform_driver.h"
-
-/* LCD Driver private data structure */
-struct lcd_drv_private_data {
-        struct device *dev;
-};
+#include "lcd_api.h"
 
 static struct class *lcd_class;
 
-static ssize_t lcdcmd_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t lcdcmd_store(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t count)
 {
-	dev_info(dev, "%s: count:%d \n", __func__, count);
+	long value;
+	int status;
+
+	status = kstrtol(buf, 0, &value);
+	if (!status)
+		lcd_send_command(dev, (u8)value);
+
+	return status ? : count;
+}
+static DEVICE_ATTR_WO(lcdcmd);
+
+static ssize_t lcdtext_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	if(buf) {
+		dev_info(dev, "lcd test: %s\n", buf);
+		lcd_print_string(dev, (char *)buf);
+	} else {
+		return -EINVAL;
+	}
+
 	return count;
+}
+static DEVICE_ATTR_WO(lcdtext);
+
+static ssize_t lcdscroll_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct lcd_private_data *lcd_data = dev_get_drvdata(dev);
+	int ret;
+
+	if (lcd_data->lcd_scroll)
+		ret = sprintf(buf, "%s\n", "on");
+	else
+		ret = sprintf(buf, "%s\n", "off");
+
+	return ret;
 }
 
-static ssize_t lcdscroll_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t lcdscroll_store(struct device *dev, struct device_attribute *attr,
+			       const char *buf, size_t count)
 {
-	dev_info(dev, "%s: count:%d \n", __func__, count);
-	return count;
-}
+	struct lcd_private_data *lcd_data = dev_get_drvdata(dev);
+	int status = 0;
 
-static ssize_t lcdtext_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{
-	dev_info(dev, "%s: count:%d \n", __func__, count);
-	return count;
+	if (sysfs_streq(buf, "on")) {
+		lcd_data->lcd_scroll = 1;
+		/* Display shift left */
+		lcd_send_command(dev, 0x18);
+	} else if (sysfs_streq(buf, "off")) {
+		lcd_data->lcd_scroll = 0;
+		/* Return home */
+		lcd_send_command(dev, 0x2);
+		/* Turn off display shift */
+		lcd_send_command(dev, 0x10);
+	} else {
+		status = -EINVAL;
+	}
+
+	return status ? : count;
 }
+static DEVICE_ATTR_RW(lcdscroll);
 
 static ssize_t lcdxy_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	dev_info(dev, "%s: \n", __func__);
-	return 0;
+	struct lcd_private_data *lcd_data = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%s\n", lcd_data->lcdxy);
 }
 
-static ssize_t lcdxy_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t lcdxy_store(struct device *dev, struct device_attribute *attr,
+			   const char *buf, size_t count)
 {
-	dev_info(dev, "%s: count:%d \n", __func__, count);
+	struct lcd_private_data *lcd_data = dev_get_drvdata(dev);
+	long value;
+	int status;
+	int x, y;
+
+	status = kstrtol(buf, 10, &value);
+	if (status)
+		return status;
+
+	x = value / 10;
+	y = value % 10;
+	/* lcd 16x2 - x should be either 1 or 2 only */
+	if (x < 1 || x > 2) {
+		dev_warn(dev, "invalid input(%d, %d), range x:1-2, y:1-16\n", x, y);
+		return count;
+	}
+
+	status = sprintf(lcd_data->lcdxy, "(%d, %d)", x, y);
+	lcd_set_cursor(dev, x, y);
+
 	return count;
 }
-
-static DEVICE_ATTR_WO(lcdcmd);
-static DEVICE_ATTR_WO(lcdscroll);
-static DEVICE_ATTR_WO(lcdtext);
 static DEVICE_ATTR_RW(lcdxy);
 
 static struct attribute *lcd_attrs[] = {
@@ -59,41 +119,84 @@ static const struct attribute_group *lcd_attr_groups[] = {
 	NULL,
 };
 
+static int lcd_sysfs_data_init(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct lcd_private_data *lcd_data = platform_get_drvdata(pdev);
+
+	lcd_data->lcd_scroll = 0;
+        sprintf(lcd_data->lcdxy, "(1, 1)");
+
+	/* lcd gpio desc initialization */
+	lcd_data->desc[LCD_RS] = devm_gpiod_get(dev, "rs", GPIOD_OUT_LOW);
+	lcd_data->desc[LCD_RW] = devm_gpiod_get(dev, "rw", GPIOD_OUT_LOW);
+	lcd_data->desc[LCD_EN] = devm_gpiod_get(dev, "en", GPIOD_OUT_LOW);
+	lcd_data->desc[LCD_D4] = devm_gpiod_get(dev, "d4", GPIOD_OUT_LOW);
+	lcd_data->desc[LCD_D5] = devm_gpiod_get(dev, "d5", GPIOD_OUT_LOW);
+	lcd_data->desc[LCD_D6] = devm_gpiod_get(dev, "d6", GPIOD_OUT_LOW);
+	lcd_data->desc[LCD_D7] = devm_gpiod_get(dev, "d7", GPIOD_OUT_LOW);
+	if(IS_ERR(lcd_data->desc[LCD_RS]) || \
+	   IS_ERR(lcd_data->desc[LCD_RW]) || \
+	   IS_ERR(lcd_data->desc[LCD_EN]) || \
+	   IS_ERR(lcd_data->desc[LCD_D4]) || \
+	   IS_ERR(lcd_data->desc[LCD_D5]) || \
+	   IS_ERR(lcd_data->desc[LCD_D6]) || \
+	   IS_ERR(lcd_data->desc[LCD_D7]))   {
+		dev_err(dev,"gpio init error\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static void lcd_sysfs_remove(struct platform_device *pdev)
 {
-	struct lcd_drv_private_data *drv_data = platform_get_drvdata(pdev);
+	struct lcd_private_data *lcd_data = platform_get_drvdata(pdev);
 
-	if (!drv_data)
-		dev_warn(&pdev->dev, "no drv_data on remove\n");
+	if (!lcd_data)
+		dev_warn(&pdev->dev, "no device data on remove\n");
 
-	if(drv_data->dev)
-		device_unregister(drv_data->dev);
+	lcd_deinit(&pdev->dev);
+
+	if(lcd_data->sysfs_dev)
+		device_unregister(lcd_data->sysfs_dev);
 
 	platform_set_drvdata(pdev, NULL);
 	dev_info(&pdev->dev, "lcd remove success\n");
 }
 
-
 static int lcd_sysfs_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct lcd_drv_private_data *drv_data;
+	struct lcd_private_data *lcd_data;
+	int ret;
 
-	drv_data = devm_kzalloc(dev, sizeof(*drv_data), GFP_KERNEL);
-	if (!drv_data) {
-		dev_err(dev, "Cannot allocate driver memory\n");
+	lcd_data = devm_kzalloc(dev, sizeof(*lcd_data), GFP_KERNEL);
+	if (!lcd_data) {
+		dev_err(dev, "Cannot allocate device memory\n");
 		return -ENOMEM;
 	}
 
-	drv_data->dev = dev;
-	platform_set_drvdata(pdev, drv_data);  // attach to device
+	dev_set_drvdata(dev, lcd_data);  // attach to device
 
 	/* Create devices under /sys/class/bone_lcd */
-	drv_data->dev = device_create_with_groups(lcd_class, NULL, 0, \
-			drv_data, lcd_attr_groups, "LCD16x2");
-	if (IS_ERR(drv_data->dev)) {
+	lcd_data->sysfs_dev = device_create_with_groups(lcd_class, NULL, 0, \
+				lcd_data, lcd_attr_groups, "LCD16x2");
+	if (IS_ERR(lcd_data->sysfs_dev)) {
 		dev_err(dev, "Error in device create\n");
-		return PTR_ERR(drv_data->dev);
+		return PTR_ERR(lcd_data->sysfs_dev);
+	}
+
+	ret = lcd_sysfs_data_init(pdev);
+	if (ret) {
+		dev_err(dev, "lcd private data initialization failed\n");
+		return ret;
+	}
+
+	ret = lcd_init(dev);
+	if (ret) {
+		dev_err(dev, "lcd initialization failed\n");
+		return ret;
 	}
 
 	dev_info(dev, "lcd probe success\n");
@@ -132,8 +235,6 @@ static void __exit lcd_sysfs_exit(void)
 {
 	platform_driver_unregister(&lcdsysfs_platform_driver);
 	class_destroy(lcd_class);
-
-	pr_info("lcd module exit success\n");
 }
 
 module_init(lcd_sysfs_init);
@@ -141,5 +242,5 @@ module_exit(lcd_sysfs_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Raju Lakkaraju");
-MODULE_DESCRIPTION("A LCD gpio sysfs driver");
+MODULE_DESCRIPTION("A LCD sysfs gpio driver");
 

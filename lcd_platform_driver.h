@@ -15,7 +15,23 @@
 #include <linux/of_device.h>
 #include <linux/gpio/consumer.h>
 
-#undef pr_fmt
-#define pr_fmt(fmt) "%s: " fmt,__func__
+enum {
+	LCD_RS,
+	LCD_RW,
+	LCD_EN,
+	LCD_D4,
+	LCD_D5,
+	LCD_D6,
+	LCD_D7,
+	LCD_GPIO_COUNT
+};
+
+/* LCD device private data strucuture */
+struct lcd_private_data {
+	int lcd_scroll;
+	char lcdxy[8];  /* Cursor position - (2, 16) */
+	struct gpio_desc *desc[LCD_GPIO_COUNT];
+	struct device *sysfs_dev;
+};
 
 #endif

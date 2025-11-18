@@ -84,3 +84,80 @@ lcdcmd     lcdscroll  lcdtext    lcdxy      power      subsystem  uevent
 [root@BBB: LCD16x2]# cat lcdtext
 cat: can't open 'lcdtext': Permission denied
 
+* Mount debugfs:
+* --------------
+[root@BBB: ~]# mount -t debugfs none /sys/kernel/debug
+[root@BBB: ~]# cat /sys/kernel/debug/pinctrl/44e10800.pinmux-pinctrl-single/pinmux-pins | grep -i lcd
+pin 40 (PIN40): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 41 (PIN41): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 42 (PIN42): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 43 (PIN43): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 44 (PIN44): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 45 (PIN45): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 46 (PIN46): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+[root@BBB: ~]#
+
+[root@BBB: 44e10800.pinmux-pinctrl-single]# cat pingroups
+...
+group: bone_p8_gpios
+pin 40 (PIN40)
+pin 41 (PIN41)
+pin 42 (PIN42)
+pin 43 (PIN43)
+pin 44 (PIN44)
+pin 45 (PIN45)
+pin 46 (PIN46)
+
+[root@BBB: 44e10800.pinmux-pinctrl-single]# ls
+gpio-ranges       pingroups         pinmux-functions  pinmux-pins       pinmux-select     pins
+[root@BBB: 44e10800.pinmux-pinctrl-single]# cat pins
+...
+pin 40 (PIN40) 6:gpio-32-63 44e108a0 0000000f pinctrl-single
+pin 41 (PIN41) 7:gpio-32-63 44e108a4 0000000f pinctrl-single
+pin 42 (PIN42) 8:gpio-32-63 44e108a8 0000000f pinctrl-single
+pin 43 (PIN43) 9:gpio-32-63 44e108ac 0000000f pinctrl-single
+pin 44 (PIN44) 10:gpio-32-63 44e108b0 0000000f pinctrl-single
+pin 45 (PIN45) 11:gpio-32-63 44e108b4 0000000f pinctrl-single
+pin 46 (PIN46) 12:gpio-32-63 44e108b8 0000000f pinctrl-single
+
+* Working LCD Commands Test:
+* --------------------------
+[root@BBB: LCD16x2]# echo 0x1 > lcdcmd
+[root@BBB: LCD16x2]# echo -n "Hello Raju" > lcdtext
+[root@BBB: LCD16x2]# echo 0x2 > lcdcmd
+[root@BBB: LCD16x2]# echo 21 > lcdxy
+sh: write error: Bad address
+[root@BBB: LCD16x2]# echo -n "Welcome... !!!" > lcdtext
+[root@BBB: LCD16x2]# echo on > lcdscroll
+[root@BBB: LCD16x2]# echo on > lcdscroll    <-- Left shift the one charecter space
+[root@BBB: LCD16x2]# echo off > lcdscroll   <-- Reset the display to actual display
+4. Display Control
+0x08 – Display OFF, Cursor OFF, Blink OFF       ← **use this to stop blinking**
+0x0C – Display ON, Cursor OFF, Blink OFF
+0x0E – Display ON, Cursor ON, Blink OFF
+0x0D – Display ON, Cursor OFF, Blink ON
+0x0F – Display ON, Cursor ON, Blink ON
+
+[root@BBB: ~]# lcdinsmod
+[root@BBB: ~]# cdlcdcmds
+[root@BBB: LCD16x2]# pwd
+/sys/class/bone_lcd/LCD16x2
+[root@BBB: LCD16x2]# ls
+lcdcmd     lcdscroll  lcdtext    lcdxy      power      subsystem  uevent
+[root@BBB: LCD16x2]# echo 0x1 > lcdcmd
+[root@BBB: LCD16x2]# echo 0x2 > lcdcmd
+[root@BBB: LCD16x2]# echo -n "Good morning !" > lcdtext
+[root@BBB: LCD16x2]# echo 21 > lcdxy
+[root@BBB: LCD16x2]# echo -n "World" > lcdtext
+[root@BBB: LCD16x2]# cat lcdxy
+(2, 1)
+[root@BBB: LCD16x2]# echo "on" > lcdscroll
+[root@BBB: LCD16x2]# echo "on" > lcdscroll
+[root@BBB: LCD16x2]# echo "on" > lcdscroll
+[root@BBB: LCD16x2]# echo "on" > lcdscroll
+[root@BBB: LCD16x2]# echo "on" > lcdscroll
+[root@BBB: LCD16x2]# echo "on" > lcdscroll
+[root@BBB: LCD16x2]# echo 0x2 > lcdcmd
+[root@BBB: LCD16x2]# echo 5 > lcdxy
+[ 4264.880161] bone_lcd LCD16x2: invalid input(0, 5), range x:1-2, y:1-16
+
