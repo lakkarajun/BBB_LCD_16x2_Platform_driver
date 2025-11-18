@@ -144,3 +144,48 @@ So, it cannot live inside .probe(), because .probe() may run multiple times—on
 instance.
 
 #########################################################################################
+Q7: with my beaglebone black lcd platform driver, LCD 16x2 display blink the 1st location
+continuously. how to turn off LCD display by sending class attributes?
+
+Ans: That means the pinctrl driver has set the pins, but your LCD platform driver has NOT
+yet requested the GPIOs — therefore they are marked GPIO UNCLAIMED.
+Your LCD driver must call devm_gpiod_get() for every GPIO defined in the DT.
+Until then, kernel will not mark those GPIOs as “claimed”.
+What you must do in your LCD driver?
+------------------------------------
+For each DT field: rs-gpios, rw-gpios, en-gpios, d4-gpios, d5-gpios, d6-gpios, d7-gpios
+You must retrieve the GPIOs inside your probe():
+/* Get GPIOs from Device Tree */
+   lcd_data->desc[LCD_RS] = devm_gpiod_get(dev, "rs", GPIOD_OUT_LOW);
+What will happen after this?
+----------------------------
+# cat /sys/kernel/debug/pinctrl/44e10800.pinmux-pinctrl-single/pinmux-pins
+pin 40 (PIN40): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 41 (PIN41): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 42 (PIN42): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 43 (PIN43): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 44 (PIN44): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 45 (PIN45): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+pin 46 (PIN46): lcd16x2 (GPIO UNCLAIMED) function bone_p8_gpios group bone_p8_gpios
+Important: DT naming must match Linux GPIO names
+In DT: rs-gpios = <&gpio2 6 GPIO_ACTIVE_HIGH>;
+In driver: devm_gpiod_get(dev, "rs", ...);   // "rs" <-- drops "-gpios"
+Why your LCD blinks the first location?
+---------------------------------------
+Because EN/D4–D7 lines are floating (GPIO not requested), so the LCD is reading
+garbage signals → acts like a random blink at (0,0).
+Once GPIOs are claimed + driven correctly, the blinking stops.
+Note: Pin mux correctness for P8-40 → P8-46
+BBB to LCD 16x2 wiring details:
+
+**** Beaglebone Black <----->  16x2 LCD *********
+-------------------------------------------------
+     PIN 45 - DATA0   <----->   RS (Resiger Select) - PIN-4
+     PIN 46 - DATA1   <----->   RW (Read/Write    ) - PIN-5
+     PIN 43 - DATA2   <----->   EN (Enable)         - PIN-6
+     PIN 44 - DATA3   <----->   D4 (Data Line 4)    - PIN-11
+     PIN 41 - DATA4   <----->   D5 (Data Line 5)    - PIN-12
+     PIN 42 - DATA5   <----->   D6 (Data Line 6)    - PIN-13
+     PIN 39 - DATA6   <----->   D7 (Data Line 7)    - PIN-14
+
+#########################################################################################
